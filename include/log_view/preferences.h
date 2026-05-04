@@ -28,31 +28,39 @@
 
 #pragma once
 
-#include <memory>
-
-#include <log_view/log_filter.h>
-#include <log_view/log_store.h>
-#include <log_view/panel_interface.h>
-#include <rclcpp/rclcpp.hpp>
+#include <set>
+#include <string>
 
 namespace log_view {
 
-class StatusPanel : public PanelInterface {
-  public:
-  StatusPanel(int height, int width, int y, int x, LogStorePtr& logs, LogFilter& filter)
-  : PanelInterface(height, width, y, x), logs_(logs), filter_(filter) {}
-  virtual ~StatusPanel() {}
-  virtual void refresh();
+struct Preferences {
+  enum class TimestampFormat {
+    SECONDS,      // raw ROS seconds since epoch (e.g. 1234567.8901)
+    ELAPSED,      // seconds since first message
+    TIME_OF_DAY,  // local wall clock HH:MM:SS.mmm
+  };
 
-  virtual void setRosTime(const rclcpp::Time& time) { ros_time_ = time; }
-  virtual void setSystemTime(const rclcpp::Time& time) { system_time_ = time; }
+  TimestampFormat timestamp_format = TimestampFormat::SECONDS;
+  bool persist_filters = false;
+  bool persist_logs = false;
+  size_t log_rotate_size = 10 * 1024 * 1024;   // 10 MB
+  size_t log_max_size    = 100 * 1024 * 1024;   // 100 MB
 
-  protected:
-  rclcpp::Time ros_time_ = rclcpp::Time(0);
-  rclcpp::Time system_time_ = rclcpp::Time(0);
-  LogStorePtr logs_;
-  LogFilter& filter_;
+  struct FilterSettings {
+    bool debug = true;
+    bool info = true;
+    bool warn = true;
+    bool error = true;
+    bool fatal = true;
+    bool node_filter_enabled = false;
+    std::string filter_pattern;
+    std::string exclude_pattern;
+    std::set<std::string> node_whitelist;  // nodes to show when node filter is enabled
+  } filters;
+
+  static std::string defaultPath();
+  bool load();
+  void save() const;
 };
-typedef std::shared_ptr<StatusPanel> StatusPanelPtr;
 
 }  // namespace log_view
