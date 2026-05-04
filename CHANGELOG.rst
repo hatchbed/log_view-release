@@ -2,6 +2,25 @@
 Changelog for package log_view
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+0.3.1 (2026-05-04)
+------------------
+* Persist logs to disk in ``~/.local/share/log_view/`` with configurable rotation and max size.
+* Load persisted logs on startup.
+* Add preferences panel (CTRL-k) for persistence and filter settings.
+* Show filtered log count in status bar (``logs: X of Y`` when a filter is active).
+* Contributors: Marc Alban
+
+0.3.0 (2026-03-29)
+------------------
+* Add details panel with per-message metadata display.
+* Enable static analysis and linting tests.
+* Contributors: Marc Alban
+
+0.2.7 (2026-02-18)
+------------------
+* Replace ament_target_dependencies with target_link_libraries.
+* Contributors: Marc Alban
+
 0.2.5 (2024-11-25)
 ------------------
 * Fix mvwprintw format-security error

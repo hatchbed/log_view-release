@@ -1,4 +1,4 @@
-// Copyright 2020 Hatchbed L.L.C.
+// Copyright 2026 Hatchbed L.L.C.
 //
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are met:
@@ -31,28 +31,24 @@
 #include <memory>
 
 #include <log_view/log_filter.h>
-#include <log_view/log_store.h>
 #include <log_view/panel_interface.h>
-#include <rclcpp/rclcpp.hpp>
 
 namespace log_view {
 
-class StatusPanel : public PanelInterface {
+class DetailsPanel : public PanelInterface {
   public:
-  StatusPanel(int height, int width, int y, int x, LogStorePtr& logs, LogFilter& filter)
-  : PanelInterface(height, width, y, x), logs_(logs), filter_(filter) {}
-  virtual ~StatusPanel() {}
+  DetailsPanel(int height, int width, int y, int x, const LogFilter& filter)
+  : PanelInterface(height, width, y, x), filter_(filter) {}
+  virtual ~DetailsPanel() {}
   virtual void refresh();
 
-  virtual void setRosTime(const rclcpp::Time& time) { ros_time_ = time; }
-  virtual void setSystemTime(const rclcpp::Time& time) { system_time_ = time; }
-
   protected:
-  rclcpp::Time ros_time_ = rclcpp::Time(0);
-  rclcpp::Time system_time_ = rclcpp::Time(0);
-  LogStorePtr logs_;
-  LogFilter& filter_;
+  virtual size_t getContentSize() const { return 6; }
+  virtual int getContentHeight() const { return height_ - 2; }
+  virtual int getContentWidth() const;
+
+  const LogFilter& filter_;
 };
-typedef std::shared_ptr<StatusPanel> StatusPanelPtr;
+typedef std::shared_ptr<DetailsPanel> DetailsPanelPtr;
 
 }  // namespace log_view
