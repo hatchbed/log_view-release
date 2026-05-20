@@ -58,6 +58,7 @@ public:
   void setErrorLevel(bool enable);
   void setFatalLevel(bool enable);
   void setEnableNodeFilter(bool enable);
+  void setShowSessionBoundaries(bool enable);
   void toggleNode(const std::string& node);
   void selectAllNodes();
   void invertNodes();
@@ -70,6 +71,7 @@ public:
   bool getFatalLevel() const { return fatal_level_; }
   bool getEnableNodeFilter() const { return filter_nodes_; }
   bool getNodeFilterActive() const { return filter_nodes_ && selected_node_count_ > 0; }
+  bool getShowSessionBoundaries() const { return show_session_boundaries_; }
 
   void clearLogs();
   void reset();
@@ -106,6 +108,8 @@ public:
 
 private:
   bool accepted(const LogEntry& entry, bool new_entry = false);
+  void cleanSessionBoundaries();
+  void removeAtIndex(size_t pos);
 
   LogStorePtr logs_;
   LogEntry dummy_entry_;
@@ -130,6 +134,7 @@ private:
   bool error_level_ = true;
   bool fatal_level_ = true;
   bool filter_nodes_ = false;
+  bool show_session_boundaries_ = true;
 
   std::string filter_string_;
   std::string exclude_string_;

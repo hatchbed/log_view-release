@@ -99,13 +99,110 @@ bool LogPanel::handleKey(int key) {
     return false;
   }
 
-  if (key == ctrl('a')) {
-      selectAll();
+  if (key == 27 && filter_.getSelectStart() >= 0) {
+    filter_.clearSelect();
+    forceRefresh();
+    return true;
+  }
 
-      return true;
+  if (key == ctrl('a')) {
+    selectAll();
+    return true;
+  }
+
+  if (key == KEY_SR || key == KEY_SF || key == KEY_SPREVIOUS ||
+      key == KEY_SNEXT || key == KEY_SHOME || key == KEY_SEND) {
+    extendSelect(key);
+    return true;
   }
 
   return false;
+}
+
+void LogPanel::extendSelect(int key) {
+  if (getContentSize() == 0) {
+    return;
+  }
+
+  int64_t max_idx = static_cast<int64_t>(getContentSize()) - 1;
+
+  int64_t cursor = filter_.getCursor();
+  if (cursor < 0 || cursor > static_cast<int64_t>(getContentSize())) {
+    cursor = static_cast<int64_t>(getContentSize());
+  }
+  int64_t view_height = static_cast<int64_t>(getContentHeight());
+  int64_t view_top = std::max(static_cast<int64_t>(0), cursor - view_height);
+  int64_t view_bottom = std::min(cursor - 1, max_idx);
+
+  if (filter_.getSelectStart() < 0) {
+    filter_.setSelectStart(view_bottom);
+    filter_.setSelectEnd(view_bottom);
+  }
+
+  int64_t end = filter_.getSelectEnd();
+  bool visible = (end >= view_top && end <= view_bottom);
+
+  if (!visible) {
+    follow(false);
+    if (end < view_top) {
+      filter_.setCursor(
+        std::min(end + view_height, static_cast<int64_t>(getContentSize())));
+    } else {
+      moveTo(static_cast<size_t>(end) + 1);
+    }
+    forceRefresh();
+    return;
+  }
+
+  if (key == KEY_SR) {
+    end = std::max(static_cast<int64_t>(0), end - 1);
+  } else if (key == KEY_SF) {
+    end = std::min(max_idx, end + 1);
+  } else if (key == KEY_SPREVIOUS) {
+    if (end == view_top) {
+      pageUp();
+      cursor = filter_.getCursor();
+      if (cursor < 0 || cursor > static_cast<int64_t>(getContentSize())) {
+        cursor = static_cast<int64_t>(getContentSize());
+      }
+      view_top = std::max(static_cast<int64_t>(0), cursor - view_height);
+    }
+    end = view_top;
+  } else if (key == KEY_SNEXT) {
+    if (end == view_bottom) {
+      pageDown();
+      cursor = filter_.getCursor();
+      if (cursor < 0 || cursor > static_cast<int64_t>(getContentSize())) {
+        cursor = static_cast<int64_t>(getContentSize());
+      }
+      view_bottom = std::min(cursor - 1, max_idx);
+    }
+    end = view_bottom;
+  } else if (key == KEY_SHOME) {
+    end = 0;
+  } else if (key == KEY_SEND) {
+    end = max_idx;
+  }
+
+  filter_.setSelectEnd(end);
+
+  cursor = filter_.getCursor();
+  if (cursor < 0 || cursor > static_cast<int64_t>(getContentSize())) {
+    cursor = static_cast<int64_t>(getContentSize());
+  }
+  int64_t new_view_top = std::max(static_cast<int64_t>(0), cursor - view_height);
+  int64_t new_view_bottom = std::min(cursor - 1, max_idx);
+
+  if (end < new_view_top) {
+    follow(false);
+    filter_.setCursor(
+      std::min(end + view_height, static_cast<int64_t>(getContentSize())));
+  } else if (end > new_view_bottom) {
+    moveTo(static_cast<size_t>(end) + 1);
+  }
+
+  copyToClipboard();
+  forceRefresh();
 }
 
 
@@ -116,7 +213,11 @@ bool LogPanel::handleMouse(const MEVENT& event) {
 
   if (event.bstate & BUTTON1_PRESSED) {
     mouse_down_ = true;
-    startSelect(event.y - y_);
+    if ((event.bstate & BUTTON_CTRL) && filter_.getSelectStart() >= 0) {
+      endSelect(event.y - y_);
+    } else {
+      startSelect(event.y - y_);
+    }
     forceRefresh();
     return true;
   } else if (mouse_down_ && (event.bstate & REPORT_MOUSE_POSITION)) {
@@ -263,9 +364,9 @@ void LogPanel::printEntry(size_t row, const LogEntry& entry, size_t line, size_t
     if (static_cast<int>(text.size()) > w) {
       text.resize(w);
     }
-    wattron(window_, COLOR_PAIR(CP_GREY));
+    wattron(window_, kAttrGrey);
     mvwprintw(window_, row, 0, "%s", text.c_str());
-    wattroff(window_, COLOR_PAIR(CP_GREY));
+    wattroff(window_, kAttrGrey);
     return;
   }
 
@@ -294,28 +395,60 @@ void LogPanel::printEntry(size_t row, const LogEntry& entry, size_t line, size_t
   }
 
   std::string prefix = getPrefix(entry, line);
-  std::string text = prefix + entry.text[line];
-  max_length_ = std::max(max_length_, text.size());
+  const std::string& raw_line = entry.text[line];
+  std::string stripped_line = raw_line.find('\033') != std::string::npos
+    ? stripAnsi(raw_line) : raw_line;
+  std::string text = prefix + stripped_line;
+  max_length_ = std::max(max_length_, utf8DisplayWidth(text));
 
   std::string match = filter_.getSearch();
   size_t match_size = match.size();
   std::vector<size_t> match_indices;
   bool matched = false;
   if (!match.empty()) {
-    match_indices = find(entry.text[line], match, true);
+    match_indices = find(stripped_line, match, true);
     matched = !match_indices.empty();
   }
 
-  if (shift_ >= text.size()) {
-    text.clear();
-  } else if (shift_ > 0) {
-    text.erase(0, shift_);
+  if (shift_ > 0) {
+    text = utf8EraseDisplayCols(text, static_cast<size_t>(shift_));
   }
-  if (text.size() > width_) {
-    text.resize(width_);
-  }
+  text = utf8TruncateDisplayCols(text, static_cast<size_t>(width_));
 
   mvwprintw(window_, row, 0, "%s", text.c_str());
+
+  // ANSI color/bold overlay pass
+  if (raw_line.find('\033') != std::string::npos) {
+    static const int kAnsiPairs[] = {
+      CP_ANSI_BLACK, CP_ANSI_RED,  CP_ANSI_GREEN,   CP_ANSI_YELLOW,
+      CP_ANSI_BLUE,  CP_ANSI_MAGENTA, CP_ANSI_CYAN, CP_ANSI_WHITE
+    };
+    size_t vis_col = prefix.length();  // visible column of current segment start
+    for (const auto& seg : parseAnsiSegments(raw_line)) {
+      size_t seg_end = vis_col + seg.text.size();
+      bool has_color = seg.ansi_fg >= 0 && seg.ansi_fg <= 7;
+      bool has_attr  = has_color || seg.bold || seg.dim;
+      if (has_attr && !seg.text.empty()) {
+        int64_t scr_start = static_cast<int64_t>(vis_col) - static_cast<int64_t>(shift_);
+        int64_t scr_end   = static_cast<int64_t>(seg_end) - static_cast<int64_t>(shift_);
+        if (scr_start < static_cast<int64_t>(width_) && scr_end > 0) {
+          int64_t clip_start = std::max(static_cast<int64_t>(0), scr_start);
+          int64_t clip_end   = std::min(static_cast<int64_t>(width_), scr_end);
+          size_t  txt_offset = static_cast<size_t>(clip_start - scr_start);
+          size_t  txt_len    = static_cast<size_t>(clip_end - clip_start);
+          if (has_color) { wattron(window_, COLOR_PAIR(kAnsiPairs[seg.ansi_fg])); }
+          if (seg.bold)  { wattron(window_, A_BOLD); }
+          if (seg.dim)   { wattron(window_, A_DIM);  }
+          mvwprintw(window_, row, static_cast<int>(clip_start),
+            "%.*s", static_cast<int>(txt_len), seg.text.c_str() + txt_offset);
+          if (seg.dim)   { wattroff(window_, A_DIM);  }
+          if (seg.bold)  { wattroff(window_, A_BOLD); }
+          if (has_color) { wattroff(window_, COLOR_PAIR(kAnsiPairs[seg.ansi_fg])); }
+        }
+      }
+      vis_col = seg_end;
+    }
+  }
 
   if (matched) {
     wattron(window_, COLOR_PAIR(CP_DEFAULT_CYAN));
