@@ -28,6 +28,7 @@
 
 #pragma once
 
+#include <algorithm>
 #include <functional>
 #include <memory>
 #include <string>
@@ -40,17 +41,20 @@ namespace log_view {
 class PrefsPanel : public PanelInterface {
 public:
   PrefsPanel(int height, int width, int y, int x, Preferences& prefs);
-  virtual ~PrefsPanel() {}
-  virtual void refresh();
-  virtual bool handleKey(int key);
+  ~PrefsPanel() {}
+  void refresh() override;
+  bool handleKey(int key) override;
   bool handleMouse(const MEVENT& event) override { return !hidden(); }
 
   void setOnSave(std::function<void()> cb) { on_save_ = cb; }
 
 protected:
-  virtual bool canFocus() const { return false; }
+  bool canFocus() const override { return false; }
   bool canNavigate() const override { return !hidden(); }
   void activate(bool enable) override;
+  size_t getContentSize() const override { return 19; }
+  int getContentHeight() const override { return std::max(1, height_ - 5); }
+  int64_t getCursor() const override { return scroll_top_ + getContentHeight(); }
 
 private:
   void cycleTimestampFormat(int direction);
@@ -58,18 +62,22 @@ private:
   void cycleMaxSize(int direction);
   bool isFieldEnabled(int field) const;
   static std::string formatSize(size_t bytes);
+  void snapSelectionToViewport(bool prefer_top);
+  void ensureSelectedVisible();
 
   Preferences& prefs_;
   Preferences pending_;
   int selected_ = 0;
+  int scroll_top_ = 0;
   std::function<void()> on_save_;
 
-  static constexpr int kNumFields       = 5;
-  static constexpr int kFieldTimestamp  = 0;
-  static constexpr int kFieldPersist    = 1;
-  static constexpr int kFieldPersistLogs = 2;
-  static constexpr int kFieldRotateSize = 3;
-  static constexpr int kFieldMaxSize    = 4;
+  static constexpr int kNumFields            = 6;
+  static constexpr int kFieldTimestamp       = 0;
+  static constexpr int kFieldPersist         = 1;
+  static constexpr int kFieldPersistLogs     = 2;
+  static constexpr int kFieldRotateSize      = 3;
+  static constexpr int kFieldMaxSize         = 4;
+  static constexpr int kFieldSessionBound    = 5;
 
   static constexpr size_t kRotateSizePresets[] = {
     1ul * 1024 * 1024,
