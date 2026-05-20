@@ -76,6 +76,16 @@ void LogView::init() {
   init_pair(CP_GREY, 8, -1);
   init_pair(CP_DEFAULT_CYAN, -1, COLOR_CYAN);
   init_pair(CP_DEFAULT_GREY, -1, 8);
+  init_pair(CP_ANSI_BLACK,   COLOR_BLACK,   -1);
+  init_pair(CP_ANSI_RED,     COLOR_RED,     -1);
+  init_pair(CP_ANSI_GREEN,   COLOR_GREEN,   -1);
+  init_pair(CP_ANSI_YELLOW,  COLOR_YELLOW,  -1);
+  init_pair(CP_ANSI_BLUE,    COLOR_BLUE,    -1);
+  init_pair(CP_ANSI_MAGENTA, COLOR_MAGENTA, -1);
+  init_pair(CP_ANSI_CYAN,    COLOR_CYAN,    -1);
+  init_pair(CP_ANSI_WHITE,   COLOR_WHITE,   -1);
+  kAttrGrey   = (COLORS >= 16) ? COLOR_PAIR(CP_GREY)         : static_cast<attr_t>(A_DIM);
+  kAttrGreyBg = (COLORS >= 16) ? COLOR_PAIR(CP_DEFAULT_GREY) : static_cast<attr_t>(A_REVERSE);
   noecho();
   curs_set(0);
   raw();
@@ -83,6 +93,12 @@ void LogView::init() {
   mouseinterval(0);
   mousemask(ALL_MOUSE_EVENTS | REPORT_MOUSE_POSITION, NULL);
   printf("\033[?1003h\n");  // Enable mouse move events
+  define_key("\033[1;5A", KEY_SR);
+  define_key("\033[1;5B", KEY_SF);
+  define_key("\033[5;5~", KEY_SPREVIOUS);
+  define_key("\033[6;5~", KEY_SNEXT);
+  define_key("\033[1;5H", KEY_SHOME);
+  define_key("\033[1;5F", KEY_SEND);
 
   refresh();
 
@@ -124,7 +140,7 @@ void LogView::init() {
   {
     int pw = prefsPanelWidth();
     prefs_panel_ = std::make_shared<PrefsPanel>(
-      23, pw, std::max(0, LINES / 2 - 11), std::max(0, COLS / 2 - pw / 2), prefs_);
+      25, pw, std::max(0, LINES / 2 - 12), std::max(0, COLS / 2 - pw / 2), prefs_);
   }
   prefs_panel_->hide(true);
   prefs_panel_->setOnSave([this]() {
@@ -145,9 +161,12 @@ void LogView::init() {
       logs_->setWriter(log_writer_.get());
       log_writer_->start();
     }
+    log_filter_.setShowSessionBoundaries(prefs_.show_session_boundaries);
     log_panel_->forceRefresh();
   });
   panels_.push_back(prefs_panel_);
+
+  log_filter_.setShowSessionBoundaries(prefs_.show_session_boundaries);
 
   if (prefs_.persist_filters) {
     log_filter_.setDebugLevel(prefs_.filters.debug);
@@ -438,9 +457,12 @@ void LogView::refreshLayout() {
   details_panel_->resize(
     LINES - (2 + filter_panel_->visible() + exclude_panel_->visible() + search_panel_->visible()),
     COLS / 2, 1, COLS / 2 - (COLS + 1) % 2 + !log_panel_->scrollbar());
-  help_panel_->resize(24, COLS - 8, 2, 4);
+  int help_height = std::min(24, std::max(5, LINES - 4));
+  help_panel_->resize(help_height, COLS - 8, 2, 4);
   int pw = prefsPanelWidth();
-  prefs_panel_->resize(23, pw, std::max(0, LINES / 2 - 11), std::max(0, COLS / 2 - pw / 2));
+  int prefs_height = std::min(25, std::max(6, LINES - 4));
+  int prefs_y = std::max(0, LINES / 2 - prefs_height / 2);
+  prefs_panel_->resize(prefs_height, pw, prefs_y, std::max(0, COLS / 2 - pw / 2));
 }
 
 int LogView::prefsPanelWidth() const {
