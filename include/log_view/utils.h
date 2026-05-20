@@ -33,9 +33,22 @@
 #include <string>
 #include <vector>
 
+#include <curses.h>
+
 namespace log_view {
 
-enum Color { CP_DEFAULT, CP_RED, CP_YELLOW, CP_GREY, CP_DEFAULT_CYAN, CP_DEFAULT_GREY };
+enum Color {
+  CP_DEFAULT, CP_RED, CP_YELLOW, CP_GREY, CP_DEFAULT_CYAN, CP_DEFAULT_GREY,
+  CP_ANSI_BLACK, CP_ANSI_RED, CP_ANSI_GREEN, CP_ANSI_YELLOW,
+  CP_ANSI_BLUE, CP_ANSI_MAGENTA, CP_ANSI_CYAN, CP_ANSI_WHITE
+};
+
+struct AnsiSegment {
+  std::string text;
+  int ansi_fg = -1;  // -1 = default, 0-7 = ANSI standard color index
+  bool bold = false;
+  bool dim  = false;
+};
 
 std::string toString(double val, int precision);
 
@@ -49,5 +62,15 @@ std::vector<size_t> find(
   const std::string& text, const std::string& substr, bool case_insensitive);
 
 void toClipboard(const std::string& text);
+
+std::string stripAnsi(const std::string& raw);
+std::vector<AnsiSegment> parseAnsiSegments(const std::string& raw);
+
+size_t utf8DisplayWidth(const std::string& s);
+std::string utf8EraseDisplayCols(const std::string& s, size_t cols);
+std::string utf8TruncateDisplayCols(const std::string& s, size_t cols);
+
+extern attr_t kAttrGrey;    // replaces COLOR_PAIR(CP_GREY)   — dim on 8-color terminals
+extern attr_t kAttrGreyBg;  // replaces COLOR_PAIR(CP_DEFAULT_GREY) — reverse on 8-color terminals
 
 }  // namespace log_view
