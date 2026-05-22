@@ -84,8 +84,11 @@ void LogView::init() {
   init_pair(CP_ANSI_MAGENTA, COLOR_MAGENTA, -1);
   init_pair(CP_ANSI_CYAN,    COLOR_CYAN,    -1);
   init_pair(CP_ANSI_WHITE,   COLOR_WHITE,   -1);
-  kAttrGrey   = (COLORS >= 16) ? COLOR_PAIR(CP_GREY)         : static_cast<attr_t>(A_DIM);
-  kAttrGreyBg = (COLORS >= 16) ? COLOR_PAIR(CP_DEFAULT_GREY) : static_cast<attr_t>(A_REVERSE);
+  init_pair(CP_BRIGHT_BLUE,  (COLORS >= 16) ? 12 : COLOR_BLUE, -1);
+  init_pair(CP_WHITE_CYAN,   COLOR_WHITE, COLOR_CYAN);
+  kAttrGrey     = (COLORS >= 16) ? COLOR_PAIR(CP_GREY)         : static_cast<attr_t>(A_DIM);
+  kAttrGreyBg   = (COLORS >= 16) ? COLOR_PAIR(CP_DEFAULT_GREY) : static_cast<attr_t>(A_REVERSE);
+  kAttrBoldBlue = A_BOLD | COLOR_PAIR(CP_ANSI_BLUE);
   noecho();
   curs_set(0);
   raw();
@@ -113,6 +116,9 @@ void LogView::init() {
 
   search_panel_ = std::make_shared<SearchPanel>(1, COLS, LINES - 1, 0, log_filter_);
   search_panel_->hide(true);
+  search_panel_->setOnSearch([this]() {
+    log_panel_->forceRefresh();
+  });
   panels_.push_back(search_panel_);
 
   filter_panel_ = std::make_shared<FilterPanel>(1, COLS, LINES - 1, 0, log_filter_);
@@ -127,15 +133,22 @@ void LogView::init() {
     LINES - 2, COLS / 2, 1, COLS / 2 - (COLS + 1) % 2, log_filter_);
   node_panel_->hide(true);
   panels_.push_back(node_panel_);
+  level_panel_->setShowInvertHintCallback([this]() {
+    return node_panel_->visible() && node_panel_->focus() &&
+           !help_panel_->visible() && !prefs_panel_->visible();
+  });
 
   details_panel_ = std::make_shared<DetailsPanel>(
     LINES - 2, COLS / 2, 1, COLS / 2 - (COLS + 1) % 2, log_filter_);
   details_panel_->hide(true);
   panels_.push_back(details_panel_);
 
-  help_panel_ = std::make_shared<HelpPanel>(24, COLS - 8, 2, 4);
+  help_panel_ = std::make_shared<HelpPanel>(21, COLS - 8, 2, 4);
   help_panel_->hide(true);
   panels_.push_back(help_panel_);
+  level_panel_->setHelpOpenCallback([this]() {
+    return help_panel_->visible();
+  });
 
   {
     int pw = prefsPanelWidth();
@@ -162,6 +175,9 @@ void LogView::init() {
       log_writer_->start();
     }
     log_filter_.setShowSessionBoundaries(prefs_.show_session_boundaries);
+    log_panel_->forceRefresh();
+  });
+  prefs_panel_->setOnPreview([this]() {
     log_panel_->forceRefresh();
   });
   panels_.push_back(prefs_panel_);
@@ -230,8 +246,8 @@ bool LogView::exited() const {
   return exited_;
 }
 
-void LogView::setRosTime(const rclcpp::Time& time) {
-  status_panel_->setRosTime(time);
+void LogView::setSimTime(const rclcpp::Time& time) {
+  status_panel_->setSimTime(time);
 }
 
 void LogView::setSystemTime(const rclcpp::Time& time) {
@@ -318,7 +334,6 @@ void LogView::update() {
     for (size_t i = 1; i <= panels_.size(); i++) {
       key_used = panels_[panels_.size() - i]->handleNavigation(ch);
       if (key_used) {
-        level_panel_->refresh();
         break;
       }
     }
@@ -327,7 +342,7 @@ void LogView::update() {
   if (!key_used && !mouse_down_) {
     if (ch == KEY_RESIZE) {
       refreshLayout();
-    } else if (/*ch == KEY_ESC || */ch == ctrl('q') || ch == ctrl('c')) {
+    } else if (ch == ctrl('q') || ch == ctrl('c')) {
       exited_ = true;
     } else if (ch == '\t') {
       tab();
@@ -342,12 +357,6 @@ void LogView::update() {
     } else if (ch == ctrl('x')) {
       search_panel_->clearSearch();
       refreshLayout();
-    } else if (ch == KEY_BACKSPACE) {
-      log_filter_.prevMatch();
-      log_panel_->forceRefresh();
-    } else if (ch == KEY_ENTER_VAL) {
-      log_filter_.nextMatch();
-      log_panel_->forceRefresh();
     } else if (ch == ctrl('e')) {
       exclude_panel_->hide(exclude_panel_->visible());
       if (exclude_panel_->focus()) {
@@ -361,7 +370,7 @@ void LogView::update() {
       if (filter_panel_->focus()) {
         unfocusOthers(filter_panel_);
       } else {
-        focusNext(exclude_panel_);
+        focusNext(filter_panel_);
       }
       refreshLayout();
     } else if (ch == ctrl('h')) {
@@ -376,6 +385,7 @@ void LogView::update() {
       } else {
         focusNext(node_panel_);
       }
+      refreshLayout();
     } else if (ch == ctrl('d')) {
       node_panel_->hide(true);
       details_panel_->hide(details_panel_->visible());
@@ -384,6 +394,7 @@ void LogView::update() {
       } else {
         focusNext(details_panel_);
       }
+      refreshLayout();
     } else if (ch == KEY_F(1)) {
       level_panel_->toggleDebug();
     } else if (ch == KEY_F(2)) {
@@ -415,6 +426,7 @@ void LogView::update() {
     details_panel_->refresh();
   }
 
+  level_panel_->refresh();
   status_panel_->refresh();
 
   if (help_panel_->visible()) {
@@ -440,6 +452,9 @@ void LogView::update() {
 
 void LogView::refreshLayout() {
   status_panel_->resize(1, COLS, 0, 0);
+  int side_start = COLS / 2 - (COLS + 1) % 2 + !log_panel_->scrollbar();
+  bool side_visible = node_panel_->visible() || details_panel_->visible();
+  log_panel_->setRightEdge(side_visible ? side_start : 0);
   log_panel_->resize(
     LINES - (2 + filter_panel_->visible() + exclude_panel_->visible() + search_panel_->visible()),
     COLS, 1, 0);
@@ -453,11 +468,11 @@ void LogView::refreshLayout() {
   exclude_panel_->resize(1, COLS, LINES - 1, 0);
   node_panel_->resize(
     LINES - (2 + filter_panel_->visible() + exclude_panel_->visible() + search_panel_->visible()),
-    COLS / 2, 1, COLS / 2 - (COLS + 1) % 2 + !log_panel_->scrollbar());
+    COLS / 2, 1, side_start);
   details_panel_->resize(
     LINES - (2 + filter_panel_->visible() + exclude_panel_->visible() + search_panel_->visible()),
-    COLS / 2, 1, COLS / 2 - (COLS + 1) % 2 + !log_panel_->scrollbar());
-  int help_height = std::min(24, std::max(5, LINES - 4));
+    COLS / 2, 1, side_start);
+  int help_height = std::min(21, std::max(5, LINES - 4));
   help_panel_->resize(help_height, COLS - 8, 2, 4);
   int pw = prefsPanelWidth();
   int prefs_height = std::min(25, std::max(6, LINES - 4));
