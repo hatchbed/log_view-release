@@ -44,15 +44,16 @@ class StatusPanel : public PanelInterface {
   virtual ~StatusPanel() {}
   virtual void refresh();
 
-  virtual void setRosTime(const rclcpp::Time& time) { ros_time_ = time; }
+  virtual void setSimTime(const rclcpp::Time& time) { sim_time_ = time; has_sim_time_ = true; }
   virtual void setSystemTime(const rclcpp::Time& time) { system_time_ = time; }
 
   protected:
-  rclcpp::Time ros_time_ = rclcpp::Time(0);
+  rclcpp::Time sim_time_ = rclcpp::Time(0);
   rclcpp::Time system_time_ = rclcpp::Time(0);
+  bool has_sim_time_ = false;
   LogStorePtr logs_;
   LogFilter& filter_;
 };
-typedef std::shared_ptr<StatusPanel> StatusPanelPtr;
+using StatusPanelPtr = std::shared_ptr<StatusPanel>;
 
 }  // namespace log_view
