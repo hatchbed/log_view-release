@@ -2,6 +2,13 @@
 Changelog for package log_view
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+0.5.0 (2026-05-28)
+------------------
+* Add loading logs from one or more bag files.
+* Add bag source panel to toggle per bag filtering.
+* Fix navigation in node selection panel when the panel has no scroll bar.
+* Fix restoring selected whitelist nodes after clearing logs.
+
 0.4.0 (2026-05-22)
 ------------------
 * Added subscription to /clock to display sim time on status bar.
